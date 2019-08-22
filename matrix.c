@@ -1,8 +1,18 @@
 #include "stc12.h"
 #include <intrins.h>
+#define LARGE_FRONT_ADDR 0X00
+#define MIDDLE_FRONT_ADDR 0X158
+#define SMALL_FRONT_ADDR 0X180
+#define sec 0X00
+#define min 0X01
+#define hour 0X02
+#define wk 0x03
+#define day 0x04
+#define month 0x05
+#define year 0x06
 #define dot 10
 #define ADC_FLAG 0X10
-void show(char a,char b,char c,char d,char e ,char f,char g,char h);
+void show_current_time(char hour10,char hour1,char min10,char min1,char sec10,char sec1);
 void show8x8(char *p);
 void changeTime(unsigned char i,unsigned char tmp);
 void Outchr(unsigned char);
@@ -18,26 +28,25 @@ sbit SDA=P1^4;//SPI DATA
 sbit SCK_OUT=P3^5;//SPI CLK OUT
 sbit IIC_SDA=P3^3;
 sbit IIC_SCL=P3^2;
-char Rev[20]="";
-char Date[11]="20";
+char Rev[25]="";
+char Date[11]="";
 unsigned char pos=0;
 unsigned char mode=0;
-code unsigned char addr[]={0x00,0x01,0x02,0x04,0x05,0x06};
 unsigned char ADC_time=20;
 unsigned char Read_time=10;
-code unsigned char table[][4]={
-	{0x3e,0x22,0x3e,0x00,},//0
-	{0x24,0x3e,0x20,0x00,},//1
-	{0x3a,0x2a,0x2e,0x00,},//2
-	{0x2a,0x2a,0x3e,0x00,},//3
-	{0x0e,0x08,0x3e,0x00,},//4
-	{0x2e,0x2a,0x3a,0x00,},//5
-	{0x3e,0x2a,0x3a,0x00,},//6
-	{0x06,0x02,0x3e,0x00,},//7
-	{0x3e,0x2a,0x3e,0x00,},//8
-	{0x2e,0x2a,0x3e,0x00,},//9
-	{0x00,0x36,0x36,0x00,}//dot
-};
+unsigned char got_flag=0;
+void Delay100us()		//@11.0592MHz
+{
+	unsigned char i, j;
+
+	i = 3;
+	j = 35;
+	do
+	{
+		while (--j);
+	} while (--i);
+}
+
 void Iapldle()
 {
 	IAP_CONTR=0;
@@ -61,7 +70,7 @@ char IapReadByte(unsigned int addr)
 	Iapldle();//Close ISPIAP/EEPROM function
 	return dat;//Return Flash data
 }
-unsigned char l_tmpdate[]={50,59,23,31,7,19};//秒，分，时，日，月,年
+unsigned char l_tmpdate[]={0,0,0,0,0,0,0};//秒，分，时，星期，日，月,年
 void delay_IIC(void)   
 {//IIC总线限速延时函数。
 //该函数是空函数，延时4个机器周期。
@@ -69,15 +78,6 @@ _nop_();_nop_();
 }
 void Init()
 {	
-	Date[2]=BCD_Decimal(IIC_single_byte_read(addr[5]))/10+'0';
-	Date[3]=BCD_Decimal(IIC_single_byte_read(addr[5]))%10+'0';
-	Date[4]=' ';
-	Date[5]=BCD_Decimal(IIC_single_byte_read(addr[4]))/10+'0';
-	Date[6]=BCD_Decimal(IIC_single_byte_read(addr[4]))%10+'0';
-	Date[7]=' ';
-	Date[8]=BCD_Decimal(IIC_single_byte_read(addr[3]))/10+'0';
-	Date[9]=BCD_Decimal(IIC_single_byte_read(addr[3]))%10+'0';
-	Date[10]='\0';
 	//PWM设置----------------------------------------------------------------------
 	CL=0;
 	CMOD = 0X02;        //  设置脉冲源
@@ -245,41 +245,30 @@ void Read_RTC()
 {
 	unsigned char i=0;
 	unsigned char tmp=0;
-	tmp=BCD_Decimal(IIC_single_byte_read(addr[0]));
+	tmp=BCD_Decimal(IIC_single_byte_read(0x00));
 	if (l_tmpdate[0]!=tmp)
 	{
 		l_tmpdate[0]=tmp;
 		for (i=1;i<3;i++)
 		{
-			l_tmpdate[i]=BCD_Decimal(IIC_single_byte_read(addr[i]));
-		}
-		if (l_tmpdate[2]==23&&l_tmpdate[0]==59&&l_tmpdate[1]==59)
-		{
-			Date[2]=BCD_Decimal(IIC_single_byte_read(addr[5]))/10+'0';
-			Date[3]=BCD_Decimal(IIC_single_byte_read(addr[5]))%10+'0';
-			Date[4]=' ';
-			Date[5]=BCD_Decimal(IIC_single_byte_read(addr[4]))/10+'0';
-			Date[6]=BCD_Decimal(IIC_single_byte_read(addr[4]))%10+'0';
-			Date[7]=' ';
-			Date[8]=BCD_Decimal(IIC_single_byte_read(addr[3]))/10+'0';
-			Date[9]=BCD_Decimal(IIC_single_byte_read(addr[3]))%10+'0';
-			Date[10]='\0';
+			l_tmpdate[i]=BCD_Decimal(IIC_single_byte_read(i));
 		}
 	}
 }
 void Set_RTC(void)
 {
     unsigned char i,tmp;
-    for(i=0;i<6;i++)
-    {       //BCD处理
+    for(i=0;i<7;i++)
+    {     
+    	//BCD处理
         tmp=l_tmpdate[i]/10;
         l_tmpdate[i]=l_tmpdate[i]%10;
         l_tmpdate[i]|=tmp<<4;
     } 
 //    IIC_single_byte_write(0x0e,0X8c);
-     for(i=0;i<6;i++)        //6次写入 秒分时日月年
+     for(i=0;i<7;i++)        //7次写入 秒、分、时、星期、日、月、年
      {
-        IIC_single_byte_write(addr[i],l_tmpdate[i]);
+        IIC_single_byte_write(i,l_tmpdate[i]);
      }
     IIC_single_byte_write(0x0e,0x0c);
 }
@@ -288,7 +277,32 @@ void main()
 	Init();
 	Read_RTC();
 	while(1)
-	{	
+	{
+		unsigned char i=0;	
+		if (got_flag)
+		{
+			if (Rev[0]=='t')
+			{ 
+				l_tmpdate[0]=(Rev[18]-'0')*10+Rev[19]-'0';
+				l_tmpdate[1]=(Rev[15]-'0')*10+Rev[16]-'0';
+				l_tmpdate[2]=(Rev[12]-'0')*10+Rev[13]-'0';
+				l_tmpdate[3]=(Rev[10]-'0');
+				l_tmpdate[4]=(Rev[7]-'0')*10+Rev[8]-'0';
+				l_tmpdate[5]=(Rev[4]-'0')*10+Rev[5]-'0';
+				l_tmpdate[6]=(Rev[1]-'0')*10+Rev[2]-'0';
+				Set_RTC();
+				Rev[0]='T';
+			}
+			Date[0]=BCD_Decimal(IIC_single_byte_read(month))/10+'0';
+			Date[1]=BCD_Decimal(IIC_single_byte_read(month))%10+'0';
+			Date[2]=' ';
+			Date[3]=BCD_Decimal(IIC_single_byte_read(day))/10+'0';
+			Date[4]=BCD_Decimal(IIC_single_byte_read(day))%10+'0';
+			Date[5]=' ';
+			Date[6]=BCD_Decimal(IIC_single_byte_read(wk))+'0';
+			Date[7]='\0';
+			got_flag=0;
+		}
 		if(!ADC_time)
 		{
 			ADC();
@@ -300,37 +314,40 @@ void main()
 			Read_time=4;
 		}
 		if(mode==0)
-			show(l_tmpdate[2]/10,l_tmpdate[2]%10,dot,l_tmpdate[1]/10,l_tmpdate[1]%10,dot,l_tmpdate[0]/10,l_tmpdate[0]%10);
+			show_current_time(l_tmpdate[2]/10,l_tmpdate[2]%10,l_tmpdate[1]/10,l_tmpdate[1]%10,l_tmpdate[0]/10,l_tmpdate[0]%10);
 		else
-			show8x8(Rev);
-		
-		//show(1,2,3,4,5,6,7,8);
+		{
+			show8x8(Date);
+		}
 	}
 }
-void show(char a,char b,char c,char d,char e ,char f,char g,char h)
+void show_current_time(char hour10,char hour1,char min10,char min1,char sec10,char sec1)
 {
-	unsigned char i,j;
+	unsigned char i,j,k;
 	unsigned char duan;
+	//unsigned char Animation[2]={0x14,0x22};
 	SDA=0;
-	for (j=0;j<32;j++)
+	for (j=0;j<29;j++)
 		{
 			SCK_IN=0;
 			SCK_OUT=0;
-			switch(j/4)
+			k=j/4;
+			switch(k)
 			{
-				case 0:duan=table[a][j%4];break;
-				case 1:duan=table[b][j%4];break;
-				case 2:duan=table[c][j%4];break;
-				case 3:duan=table[d][j%4];break;
-				case 4:duan=table[e][j%4];break;
-				case 5:duan=table[f][j%4];break;
-				case 6:duan=table[g][j%4];break;
-				case 7:duan=table[h][j%4];break;
+				case 0:duan=IapReadByte(SMALL_FRONT_ADDR+hour10*4+j%4);break;
+				case 1:duan=IapReadByte(SMALL_FRONT_ADDR+hour1*4+j%4);break;
+				case 2:duan=0x14;j+=1;if (j==11) duan=0x00; break;
+				case 3:duan=IapReadByte(SMALL_FRONT_ADDR+min10*4+j%4);break;
+				case 4:duan=IapReadByte(SMALL_FRONT_ADDR+min1*4+ j%4);break;
+				case 5:duan=0x00;j+=1;break;
+				case 6:duan=IapReadByte(MIDDLE_FRONT_ADDR+sec1*4+j%4);break;
+			}
+			if (sec10>k)
+			{
+				duan|=0x80;
 			}
 			SCK_OUT_DUAN=0;
 			SCK_IN=1;
-			//if(duan)
-			{
 				for (i = 0; i < 8; ++i)
 				{
 					SDA_DUAN=duan&0x80;
@@ -339,7 +356,7 @@ void show(char a,char b,char c,char d,char e ,char f,char g,char h)
 					SCK_IN_DUAN=1;
 				}
 				SCK_OUT=SCK_OUT_DUAN=1;
-			}	
+			Delay100us();
 			SDA=1;
 		}
 }
@@ -360,22 +377,15 @@ void show8x8(char *p)
 	{
 		SCK_IN=0;
 		SCK_OUT=0;
+		SCK_IN=1;
 		if (pos<len*8)
 		{
 			character=*(p+pos/8);
-			if (character==':'&&pos%8==0)
-			{
-				pos+=4;
-			}
 			if (character==' ')
 			{
 				character=16+'0';
-				if(pos%8==0)
-				{
-					pos+=4;
-				}
 			}
-			duan=IapReadByte((character-'0')*8+pos%8);
+			duan=IapReadByte(LARGE_FRONT_ADDR+(character-'0')*8+pos%8);
 		}
 		else
 			duan=0X00;
@@ -387,21 +397,16 @@ void show8x8(char *p)
 			duan<<=1;
 			SCK_IN_DUAN=1;
 		}
-		SCK_OUT_DUAN=1;
-		SCK_IN=1;
-		SCK_OUT=1;
 		SDA=1;
+		SCK_OUT_DUAN=1;
+		SCK_OUT=1;
 	}
 	pos=NO;
 	speed++;
-	if (len>4 && speed==40)
+	if (len>4 && speed==50)
 	{
 		speed=0;
 		pos++;
-	}
-	if (*(p+pos/8)==' '&&pos%8==0)
-	{
-		pos+=4;
 	}
 }
 unsigned char strlen(char *p)
@@ -431,35 +436,24 @@ void Rec() interrupt 4
 	{
 		RI=0;
 		temp=SBUF;
-		Outchr(temp);
+		//Outchr(temp);
 		if(temp!='\n')
 		{
 			Rev[i]=temp;
-			if(i<19)
+			if(i<24)
 			{
 				i++;
 			}
 		}
 		else
 		{
-			if (Rev[0]=='t')
-			{ 
-				l_tmpdate[0]=(Rev[16]-'0')*10+Rev[17]-'0';
-				l_tmpdate[1]=(Rev[13]-'0')*10+Rev[14]-'0';
-				l_tmpdate[2]=(Rev[10]-'0')*10+Rev[11]-'0';
-				l_tmpdate[3]=(Rev[7]-'0')*10+Rev[8]-'0';
-				l_tmpdate[4]=(Rev[4]-'0')*10+Rev[5]-'0';
-				l_tmpdate[5]=(Rev[1]-'0')*10+Rev[2]-'0';
-				Set_RTC();
-				Rev[0]='T';
-			}
+			got_flag=1;
 			Rev[i]='\0';
 			if (Rev[0]=='s')
 			{
 				mode=!mode;
-				Outstr(Rev);
+				Outstr("ok");
 			}
-			
 			i=0;
 		}
 
