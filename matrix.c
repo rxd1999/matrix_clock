@@ -31,12 +31,12 @@ void ADC();
 void Read_RTC();
 void Set_RTC();
 //位定义----------------------------------------------------------------------------------------
-sbit SCK_IN_DUAN=P1^0;
-sbit SCK_OUT_DUAN=P1^1;
+sbit SCK_IN_DUAN=P1^1;
+sbit SCK_OUT_DUAN=P1^0;
 sbit SDA_DUAN=P1^2;
-sbit SCK_IN=P1^3;//SPI SCK IN
+sbit SCK_IN=P3^5;//SPI SCK IN
 sbit SDA=P1^4;//SPI DATA
-sbit SCK_OUT=P3^5;//SPI CLK OUT
+sbit SCK_OUT=P1^3;//SPI CLK OUT
 sbit IIC_SDA=P3^3;
 sbit IIC_SCL=P3^2;
 //全局变量--------------------------------------------------------------------------------------
@@ -187,7 +187,7 @@ void ADC(void)
 		{
 			res=0x05;
 		}
-		Outchr(res);
+		//Outchr(res);
 		CCAP0H=res;
 	}
 }
@@ -380,12 +380,13 @@ void show_current_time(char hour10,char hour1,char min10,char min1,char sec10,ch
 			SCK_IN=1;
 				for (i = 0; i < 8; ++i)
 				{
-					SDA_DUAN=duan&0x80;
 					SCK_IN_DUAN=0;
+					SDA_DUAN=duan&0x80;
 					duan<<=1;
 					SCK_IN_DUAN=1;
 				}
 				SCK_OUT=SCK_OUT_DUAN=1;
+				
 			Delay100us();
 			SDA=1;
 		}
